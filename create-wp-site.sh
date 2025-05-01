@@ -40,7 +40,6 @@ cd "$INSTANCE_NAME"
 # Copy Docker files
 cp ../dockerfile Dockerfile
 cp ../wp-installer.sh wp-installer.sh
-cp ../docker-entrypoint-custom.sh docker-entrypoint-custom.sh
 cp ../docker-compose.yml docker-compose.yml
 
 # Remove any existing wp-content directory if it exists
