@@ -2,11 +2,14 @@
 
 This Docker setup provides a complete WordPress development environment with wp-cli pre-installed. It's designed to make it easy to spin up new WordPress test sites quickly.
 
-## Files Included
+## Project Structure
 
 - `Dockerfile` - Creates a WordPress image with wp-cli installed
 - `docker-entrypoint-custom.sh` - Custom initialization script that sets up WordPress
 - `docker-compose.yml` - Configures the WordPress and MySQL services
+- `create-wp-site.sh` - Script to create a new WordPress instance
+- `wp-content/` - Directory for WordPress themes and plugins
+- `.gitignore` - Git ignore rules for WordPress development
 
 ## Getting Started
 
@@ -15,28 +18,47 @@ This Docker setup provides a complete WordPress development environment with wp-
 - Docker Desktop installed and running
 - Basic knowledge of Docker and WordPress
 
-### Setup Instructions
+### Quick Start
 
-1. Create a new directory for your project:
-   ```
-   mkdir wordpress-dev
-   cd wordpress-dev
+1. Clone this repository:
+   ```bash
+   git clone <repository-url>
+   cd wordpress-docker
    ```
 
-2. Copy all the files from this setup into your project directory.
-
-3. Start the containers:
-   ```
+2. Start the containers:
+   ```bash
    docker-compose up -d
    ```
 
-4. Wait for WordPress to be installed automatically (this may take a minute).
+3. Wait for WordPress to be installed automatically (this may take a minute).
 
-5. Access your WordPress site at http://localhost:8080
+4. Access your WordPress site at http://localhost:8080
 
-6. Log in to the WordPress admin at http://localhost:8080/wp-admin using:
-   - Username: admin
-   - Password: admin_password (or what you set in the docker-compose.yml file)
+5. Log in to the WordPress admin at http://localhost:8080/wp-admin using:
+   - Username: jerry
+   - Password: garcia
+
+## Configuration
+
+The environment can be customized by modifying the following files:
+
+### docker-compose.yml
+
+Key configuration options:
+- Port mapping: `8080:80` (change 8080 to use a different port)
+- Database credentials
+- WordPress environment variables:
+  - `WORDPRESS_SITE_TITLE`
+  - `WORDPRESS_ADMIN_USER`
+  - `WORDPRESS_ADMIN_PASSWORD`
+  - `WORDPRESS_ADMIN_EMAIL`
+
+### Volumes
+
+- `wp_data`: Persistent WordPress files
+- `db_data`: Persistent MySQL database
+- `./wp-content`: Local development directory for themes and plugins
 
 ## Using wp-cli
 
@@ -46,7 +68,7 @@ To use wp-cli commands inside your running container:
 docker-compose exec wordpress wp --info
 ```
 
-Some useful wp-cli commands:
+Common wp-cli commands:
 
 ```bash
 # List all plugins
@@ -62,44 +84,35 @@ docker-compose exec wordpress wp plugin update --all
 docker-compose exec wordpress wp user create editor editor@example.com --role=editor
 ```
 
-## Saving Your WordPress Image
+## Development Workflow
 
-After setting up your WordPress site with desired plugins, themes, and configurations, you can save the image for future use:
+1. Place your custom themes in `wp-content/themes/`
+2. Place your custom plugins in `wp-content/plugins/`
+3. Changes to these directories are reflected immediately in the container
+
+## Creating New Sites
+
+Use the `create-wp-site.sh` script to create new WordPress instances:
 
 ```bash
-# Get the container ID
-docker ps
-
-# Create a new image from the container
-docker commit [container-id] my-wordpress-dev:latest
+./create-wp-site.sh
 ```
-
-## Creating New Sites from Your Saved Image
-
-1. Create a new docker-compose.yml file pointing to your saved image:
-   ```yaml
-   version: '3'
-   
-   services:
-     db:
-       image: mysql:5.7
-       # ...same as before
-     
-     wordpress:
-       image: my-wordpress-dev:latest  # Your saved image
-       # ...rest of configuration
-   ```
-
-2. Run `docker-compose up -d` to start your new site with all your pre-configured settings.
-
-## Customization
-
-- Edit `docker-compose.yml` to change port mappings, environment variables, or volume settings
-- Modify `docker-entrypoint-custom.sh` to add custom initialization steps
-- Update `Dockerfile` to install additional tools or plugins
 
 ## Troubleshooting
 
-- If the site doesn't come up, check the logs: `docker-compose logs`
-- To reset completely: `docker-compose down -v` (this will delete all data)
-- If you need to access the container shell: `docker-compose exec wordpress bash`
+- View container logs: `docker-compose logs`
+- Reset environment: `docker-compose down -v` (warning: deletes all data)
+- Access container shell: `docker-compose exec wordpress bash`
+- Check container status: `docker-compose ps`
+
+## Maintenance
+
+- To update WordPress core: `docker-compose exec wordpress wp core update`
+- To update all plugins: `docker-compose exec wordpress wp plugin update --all`
+- To update all themes: `docker-compose exec wordpress wp theme update --all`
+
+## Security Notes
+
+- This setup is for development purposes only
+- Default credentials should be changed in production
+- Consider using Docker secrets for sensitive data in production
