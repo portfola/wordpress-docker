@@ -21,9 +21,6 @@ RUN chown www-data:www-data /var/www/.wp-cli
 # Set working directory
 WORKDIR /var/www/html
 
-# Create initialization script to install WordPress when container starts
-COPY docker-entrypoint-custom.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint-custom.sh
-
-# Use our custom entrypoint
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint-custom.sh"]
+# Copy our installer script
+COPY wp-installer.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/wp-installer.sh
