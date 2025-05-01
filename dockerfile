@@ -22,5 +22,5 @@ RUN chown www-data:www-data /var/www/.wp-cli
 WORKDIR /var/www/html
 
 # Copy our installer script
-COPY wp-installer.sh /usr/local/bin/
+COPY wp-installer.sh /usr/local/bin/wp-installer.sh
 RUN chmod +x /usr/local/bin/wp-installer.sh

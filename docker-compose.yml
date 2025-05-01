@@ -39,12 +39,12 @@ services:
       WORDPRESS_ADMIN_EMAIL: admin@example.com
     networks:
       - wordpress_net
-    # Run the installer after container starts
+    # Add this command to run the installer after container starts
     command: >
       bash -c "
         apache2-foreground &
         sleep 10 &&
-        /usr/local/bin/wp-installer.sh
+        /usr/local/bin/wp-installer.sh &&
         wait
       "
 
