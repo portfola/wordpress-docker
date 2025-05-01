@@ -1,35 +1,25 @@
 #!/bin/bash
 set -e
 
-# Start original entrypoint in the background
-/usr/local/bin/docker-entrypoint.sh apache2-foreground &
-ORIGINAL_PID=$!
+# Wait for MySQL to be ready
+echo "Waiting for database connection..."
+MAX_TRIES=30
+COUNT=0
+until wp db check --allow-root || [ $COUNT -eq $MAX_TRIES ]; do
+  echo "Database not ready yet, waiting... ($COUNT/$MAX_TRIES)"
+  sleep 3
+  COUNT=$((COUNT+1))
+done
 
-# Wait for Apache to start 
-sleep 5
+if [ $COUNT -eq $MAX_TRIES ]; then
+  echo "ERROR: Database connection timed out!"
+  exit 1
+fi
+
+echo "Database connection successful!"
 
 # Check if WordPress is already installed
 if ! wp core is-installed --allow-root; then
-  echo "WordPress not installed, beginning installation process..."
-  
-  # Wait for MySQL to be ready
-  echo "Waiting for database connection..."
-  MAX_TRIES=30
-  COUNT=0
-  until wp db check --allow-root || [ $COUNT -eq $MAX_TRIES ]; do
-    echo "Database not ready yet, waiting... ($COUNT/$MAX_TRIES)"
-    sleep 3
-    COUNT=$((COUNT+1))
-  done
-  
-  if [ $COUNT -eq $MAX_TRIES ]; then
-    echo "ERROR: Database connection timed out!"
-    exit 1
-  fi
-  
-  echo "Database connection successful!"
-  
-  # Install WordPress
   echo "Installing WordPress..."
   wp core install --allow-root \
     --url="${WORDPRESS_SITE_URL:-localhost}" \
@@ -54,7 +44,6 @@ if ! wp core is-installed --allow-root; then
   wp plugin install wordpress-beta-tester --activate --allow-root || true
   
   echo "WordPress installation complete!"
+else
+  echo "WordPress is already installed."
 fi
-
-# Keep the container running
-wait $ORIGINAL_PID

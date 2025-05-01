@@ -26,5 +26,4 @@ COPY docker-entrypoint-custom.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint-custom.sh
 
 # Use our custom entrypoint
-ENTRYPOINT ["docker-entrypoint-custom.sh"]
-CMD ["apache2-foreground"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint-custom.sh"]
