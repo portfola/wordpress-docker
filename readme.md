@@ -5,10 +5,10 @@ This Docker setup provides a complete WordPress development environment with wp-
 ## Project Structure
 
 - `Dockerfile` - Creates a WordPress image with wp-cli installed
-- `docker-entrypoint-custom.sh` - Custom initialization script that sets up WordPress
 - `docker-compose.yml` - Configures the WordPress and MySQL services
 - `create-wp-site.sh` - Script to create a new WordPress instance
-- `wp-content/` - Directory for WordPress themes and plugins
+- `wp-installer.sh` - Handles WordPress installation and configuration
+- `cleanup-wp-sites.sh` - Utility script to clean up WordPress test sites
 - `.gitignore` - Git ignore rules for WordPress development
 
 ## Getting Started
@@ -96,6 +96,14 @@ Use the `create-wp-site.sh` script to create new WordPress instances:
 
 ```bash
 ./create-wp-site.sh
+```
+
+## Cleanup
+
+To remove test sites and clean up resources:
+
+```bash
+./cleanup-wp-sites.sh
 ```
 
 ## Troubleshooting
