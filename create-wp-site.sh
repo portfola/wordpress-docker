@@ -1,15 +1,50 @@
 #!/bin/bash
-# create-wp-site.sh - Enhanced version with custom naming and fixed monitoring
+# create-wp-site.sh - Enhanced version with custom naming, dynamic ports, and fixed argument parsing
 
 set -euo pipefail
 
 # Handle cross-platform issues
 command -v dos2unix >/dev/null 2>&1 && dos2unix "$0" 2>/dev/null || true
 
-# Parse command line arguments
+# Function to show usage
+show_usage() {
+  echo "Usage: $0 [-c] [-n custom_name] [-p port]"
+  echo "  -c               Clean up previous test instances before creating a new one"
+  echo "  -n custom_name   Use custom name instead of timestamp (wp-test-custom_name)"
+  echo "  -p port          Use custom port instead of 8080"
+  echo ""
+  echo "Examples:"
+  echo "  $0 -n myproject                    # Creates wp-test-myproject on port 8080"
+  echo "  $0 -c -n ecommerce                 # Clean up first, then create wp-test-ecommerce"
+  echo "  $0 -n portfolio -p 8081            # Create wp-test-portfolio on port 8081"
+  echo "  $0 -c -n blog -p 8082              # Clean up, create wp-test-blog on port 8082"
+  exit 1
+}
+
+# Function to find next available port
+find_available_port() {
+  local start_port=${1:-8080}
+  local port=$start_port
+  
+  while [ $port -le 8200 ]; do
+    if ! netstat -tuln 2>/dev/null | grep -q ":$port " && ! ss -tuln 2>/dev/null | grep -q ":$port "; then
+      echo $port
+      return 0
+    fi
+    ((port++))
+  done
+  
+  echo "ERROR: No available ports found between $start_port and 8200" >&2
+  return 1
+}
+
+# Default values
 CLEANUP=0
 CUSTOM_NAME=""
-while getopts "cn:" opt; do
+CUSTOM_PORT=""
+
+# Parse command line arguments using proper while loop
+while getopts "cn:p:h" opt; do
   case $opt in
     c)
       CLEANUP=1
@@ -17,18 +52,33 @@ while getopts "cn:" opt; do
     n)
       CUSTOM_NAME="$OPTARG"
       ;;
-    *)
-      echo "Usage: $0 [-c] [-n custom_name]"
-      echo "  -c               Clean up previous test instances before creating a new one"
-      echo "  -n custom_name   Use custom name instead of timestamp (wp-test-custom_name)"
-      echo ""
-      echo "Examples:"
-      echo "  $0 -n myproject     # Creates wp-test-myproject"
-      echo "  $0 -c -n ecommerce  # Clean up first, then create wp-test-ecommerce"
-      exit 1
+    p)
+      CUSTOM_PORT="$OPTARG"
+      ;;
+    h)
+      show_usage
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      show_usage
+      ;;
+    :)
+      echo "Option -$OPTARG requires an argument." >&2
+      show_usage
       ;;
   esac
 done
+
+# Shift past the parsed options
+shift $((OPTIND-1))
+
+# Validate port if specified
+if [ -n "$CUSTOM_PORT" ]; then
+  if ! [[ "$CUSTOM_PORT" =~ ^[0-9]+$ ]] || [ "$CUSTOM_PORT" -lt 1024 ] || [ "$CUSTOM_PORT" -gt 65535 ]; then
+    echo "ERROR: Port must be a number between 1024 and 65535"
+    exit 1
+  fi
+fi
 
 # Perform cleanup if requested
 if [ $CLEANUP -eq 1 ]; then
@@ -42,6 +92,9 @@ if [ $CLEANUP -eq 1 ]; then
     echo "Warning: cleanup-wp-sites.sh not found or not executable"
     echo "Skipping cleanup phase"
   fi
+  
+  echo "Cleanup complete. Proceeding with site creation..."
+  echo ""
 fi
 
 # Generate instance name
@@ -53,13 +106,34 @@ else
   INSTANCE_NAME="wp-test-$(date +%Y%m%d-%H%M%S)"
 fi
 
+# Determine port to use
+if [ -n "$CUSTOM_PORT" ]; then
+  WP_PORT="$CUSTOM_PORT"
+  echo "Using specified port: $WP_PORT"
+else
+  WP_PORT=$(find_available_port 8080)
+  if [ $? -ne 0 ]; then
+    echo "ERROR: Could not find an available port"
+    exit 1
+  fi
+  echo "Using auto-detected available port: $WP_PORT"
+fi
+
 echo "Creating WordPress test environment: $INSTANCE_NAME"
+echo "Site will be available at: http://localhost:$WP_PORT"
 echo "=================================================="
 
 # Check if directory already exists
 if [ -d "$INSTANCE_NAME" ]; then
   echo "ERROR: Directory '$INSTANCE_NAME' already exists!"
   echo "Please choose a different name or clean up the existing directory."
+  exit 1
+fi
+
+# Check if port is in use
+if netstat -tuln 2>/dev/null | grep -q ":$WP_PORT " || ss -tuln 2>/dev/null | grep -q ":$WP_PORT "; then
+  echo "ERROR: Port $WP_PORT is already in use!"
+  echo "Please specify a different port with -p or let the script auto-detect."
   exit 1
 fi
 
@@ -70,10 +144,112 @@ cd "$INSTANCE_NAME"
 # Copy Docker files
 cp ../dockerfile Dockerfile
 cp ../wp-installer.sh wp-installer.sh
-cp ../docker-compose.yml docker-compose.yml
+
+# Create modified docker-compose.yml with custom port
+cat > docker-compose.yml << EOF
+services:
+  # MySQL Service
+  db:
+    image: mysql:5.7
+    platform: linux/amd64
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    networks:
+      - wordpress_net
+    # Health check
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 5
+      interval: 5s
+
+  # WordPress Service
+  wordpress:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    image: wp-wordpress
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "$WP_PORT:80"
+    restart: always
+    volumes:
+      - wp_data:/var/www/html
+      # Use conditional mounting for wp-content
+      - \${PWD}/wp-content:/var/www/html/wp-content:delegated
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_SITE_URL: http://localhost:$WP_PORT
+      WORDPRESS_SITE_TITLE: WordPress Dev - $INSTANCE_NAME
+      WORDPRESS_ADMIN_USER: jerry
+      WORDPRESS_ADMIN_PASSWORD: garcia
+      WORDPRESS_ADMIN_EMAIL: admin@example.com
+    networks:
+      - wordpress_net
+    # Simplified startup command
+    entrypoint: ["/bin/bash", "-c"]
+    command: 
+      - |
+        # Fix any potential line ending issues
+        dos2unix /usr/local/bin/wp-installer.sh 2>/dev/null || true
+        
+        # Start Apache in background
+        apache2-foreground &
+        APACHE_PID=\$!
+        
+        # Wait a moment for Apache to start
+        sleep 5
+        
+        # Run our installer script
+        /usr/local/bin/wp-installer.sh
+        
+        # Keep Apache running
+        wait \$APACHE_PID
+
+networks:
+  wordpress_net:
+
+volumes:
+  db_data:
+  wp_data:
+EOF
 
 # Remove any existing wp-content directory if it exists
 rm -rf wp-content
+
+# Create a site info file for easy reference
+cat > site-info.txt << EOF
+WordPress Site Information
+=========================
+Instance Name: $INSTANCE_NAME
+Site URL: http://localhost:$WP_PORT
+Admin URL: http://localhost:$WP_PORT/wp-admin
+Admin Username: jerry
+Admin Password: garcia
+Created: $(date)
+Directory: $(pwd)
+
+Quick Commands:
+--------------
+Start site:     docker-compose up -d
+Stop site:      docker-compose down
+Logs:           docker-compose logs
+Status:         docker-compose ps
+WordPress CLI:  docker-compose exec wordpress wp --help
+Remove all:     docker-compose down -v
+EOF
 
 echo "Starting Docker containers..."
 # Start containers
@@ -190,10 +366,11 @@ echo "✓ WordPress installation completed"
 
 # Test if the site is accessible
 echo "Testing site accessibility..."
-if check_url "http://localhost:8080" 12; then
-  echo "✓ Site is accessible at http://localhost:8080"
+SITE_URL="http://localhost:$WP_PORT"
+if check_url "$SITE_URL" 12; then
+  echo "✓ Site is accessible at $SITE_URL"
 else
-  echo "WARNING: Site may not be fully ready yet at http://localhost:8080"
+  echo "WARNING: Site may not be fully ready yet at $SITE_URL"
   echo "Check the logs for any issues:"
   echo "  docker-compose logs"
 fi
@@ -202,10 +379,13 @@ echo ""
 echo "WordPress Site Creation Complete!"
 echo "================================="
 echo "Instance Name: $INSTANCE_NAME"
-echo "Site URL: http://localhost:8080"
-echo "Admin URL: http://localhost:8080/wp-admin"
+echo "Site URL: $SITE_URL"
+echo "Admin URL: $SITE_URL/wp-admin"
 echo "Admin login: jerry / garcia"
 echo "Directory: $(pwd)"
+echo "Port: $WP_PORT"
+echo ""
+echo "Site information saved to: site-info.txt"
 echo ""
 echo "Useful commands for this site:"
 echo "  docker-compose logs          # View container logs"
@@ -218,10 +398,10 @@ echo ""
 # Optional: Open browser (uncomment if desired)
 # if command -v open &> /dev/null; then
 #   echo "Opening site in browser..."
-#   open http://localhost:8080
+#   open "$SITE_URL"
 # elif command -v xdg-open &> /dev/null; then
 #   echo "Opening site in browser..."
-#   xdg-open http://localhost:8080
+#   xdg-open "$SITE_URL"
 # fi
 
 # Final status check
@@ -234,3 +414,59 @@ if docker-compose logs 2>&1 | grep -i error | grep -v "Access denied" | head -5;
   echo ""
   echo "Note: Some errors were found in the logs above. The site may still work correctly."
 fi
+
+# Create a quick access script for this site
+cat > manage-site.sh << 'EOF'
+#!/bin/bash
+# Quick management script for this WordPress site
+
+case "$1" in
+    start)
+        echo "Starting WordPress site..."
+        docker-compose up -d
+        ;;
+    stop)
+        echo "Stopping WordPress site..."
+        docker-compose down
+        ;;
+    restart)
+        echo "Restarting WordPress site..."
+        docker-compose down
+        docker-compose up -d
+        ;;
+    logs)
+        docker-compose logs -f
+        ;;
+    status)
+        docker-compose ps
+        ;;
+    wp)
+        shift
+        docker-compose exec wordpress wp "$@" --allow-root
+        ;;
+    remove)
+        echo "WARNING: This will completely remove the site and all data!"
+        read -p "Are you sure? (y/N): " confirm
+        if [[ $confirm == [yY] ]]; then
+            docker-compose down -v
+            cd ..
+            rm -rf "$(basename "$(pwd)")"
+            echo "Site removed completely."
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|logs|status|wp|remove}"
+        echo ""
+        echo "Examples:"
+        echo "  $0 start              # Start the site"
+        echo "  $0 stop               # Stop the site"
+        echo "  $0 logs               # View logs"
+        echo "  $0 wp plugin list     # List WordPress plugins"
+        echo "  $0 remove             # Remove site completely"
+        exit 1
+        ;;
+esac
+EOF
+
+chmod +x manage-site.sh
+echo "Site management script created: manage-site.sh"
