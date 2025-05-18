@@ -1,6 +1,11 @@
 #!/bin/bash
 # create-wp-site.sh - Enhanced version with monitoring and verification
 
+set -euo pipefail
+
+# Handle cross-platform issues
+command -v dos2unix >/dev/null 2>&1 && dos2unix "$0" 2>/dev/null || true
+
 # Parse command line arguments
 CLEANUP=0
 while getopts "c" opt; do

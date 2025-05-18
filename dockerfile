@@ -1,11 +1,12 @@
 # Use the official WordPress image as our base
 FROM wordpress:latest
 
-# Install dependencies needed for wp-cli
+# Install dependencies needed for wp-cli and cross-platform compatibility
 RUN apt-get update && apt-get install -y \
     less \
     default-mysql-client \
     sudo \
+    dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 # Install wp-cli
@@ -25,6 +26,10 @@ RUN echo "max_execution_time = 300" >> /usr/local/etc/php/conf.d/memory-limit.in
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy our installer script
+# Copy our installer script and fix line endings
 COPY wp-installer.sh /usr/local/bin/wp-installer.sh
+RUN dos2unix /usr/local/bin/wp-installer.sh
 RUN chmod +x /usr/local/bin/wp-installer.sh
+
+# Set proper ownership
+RUN chown www-data:www-data /usr/local/bin/wp-installer.sh

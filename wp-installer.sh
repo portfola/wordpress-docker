@@ -1,5 +1,8 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+# Convert line endings (helpful for cross-platform)
+command -v dos2unix >/dev/null 2>&1 && dos2unix "$0" 2>/dev/null || true
 
 echo "Starting WordPress installation process..."
 

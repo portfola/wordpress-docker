@@ -2,6 +2,7 @@ services:
   # MySQL Service
   db:
     image: mysql:5.7
+    platform: linux/amd64
     volumes:
       - db_data:/var/lib/mysql
     restart: always
@@ -12,21 +13,30 @@ services:
       MYSQL_PASSWORD: wordpress
     networks:
       - wordpress_net
+    # Health check
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 5
+      interval: 5s
 
   # WordPress Service
   wordpress:
     build: 
       context: .
       dockerfile: Dockerfile
+    platform: linux/amd64
     image: wp-wordpress
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "8080:80"
     restart: always
     volumes:
       - wp_data:/var/www/html
-      - ./wp-content:/var/www/html/wp-content
+      # Use conditional mounting for wp-content
+      - ${PWD}/wp-content:/var/www/html/wp-content:delegated
     environment:
       WORDPRESS_DB_HOST: db
       WORDPRESS_DB_NAME: wordpress
@@ -39,9 +49,13 @@ services:
       WORDPRESS_ADMIN_EMAIL: admin@example.com
     networks:
       - wordpress_net
-    # Modified startup command to ensure proper initialization
-    command: >
-      bash -c "
+    # Simplified startup command
+    entrypoint: ["/bin/bash", "-c"]
+    command: 
+      - |
+        # Fix any potential line ending issues
+        dos2unix /usr/local/bin/wp-installer.sh 2>/dev/null || true
+        
         # Start Apache in background
         apache2-foreground &
         APACHE_PID=$$!
@@ -54,7 +68,6 @@ services:
         
         # Keep Apache running
         wait $$APACHE_PID
-      "
 
 networks:
   wordpress_net:

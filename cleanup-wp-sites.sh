@@ -1,6 +1,11 @@
 #!/bin/bash
 # cleanup-wp-sites.sh
 
+set -euo pipefail
+
+# Handle cross-platform issues
+command -v dos2unix >/dev/null 2>&1 && dos2unix "$0" 2>/dev/null || true
+
 # Force mode (no prompts)
 FORCE=0
 
