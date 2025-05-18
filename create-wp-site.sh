@@ -1,5 +1,5 @@
 #!/bin/bash
-# create-wp-site.sh - Enhanced version with monitoring and verification
+# create-wp-site.sh - Enhanced version with custom naming and fixed monitoring
 
 set -euo pipefail
 
@@ -8,14 +8,23 @@ command -v dos2unix >/dev/null 2>&1 && dos2unix "$0" 2>/dev/null || true
 
 # Parse command line arguments
 CLEANUP=0
-while getopts "c" opt; do
+CUSTOM_NAME=""
+while getopts "cn:" opt; do
   case $opt in
     c)
       CLEANUP=1
       ;;
+    n)
+      CUSTOM_NAME="$OPTARG"
+      ;;
     *)
-      echo "Usage: $0 [-c]"
-      echo "  -c  Clean up previous test instances before creating a new one"
+      echo "Usage: $0 [-c] [-n custom_name]"
+      echo "  -c               Clean up previous test instances before creating a new one"
+      echo "  -n custom_name   Use custom name instead of timestamp (wp-test-custom_name)"
+      echo ""
+      echo "Examples:"
+      echo "  $0 -n myproject     # Creates wp-test-myproject"
+      echo "  $0 -c -n ecommerce  # Clean up first, then create wp-test-ecommerce"
       exit 1
       ;;
   esac
@@ -35,11 +44,24 @@ if [ $CLEANUP -eq 1 ]; then
   fi
 fi
 
-# Generate a unique name for this instance
-INSTANCE_NAME="wp-test-$(date +%Y%m%d-%H%M%S)"
+# Generate instance name
+if [ -n "$CUSTOM_NAME" ]; then
+  # Sanitize custom name (remove special characters, replace spaces with hyphens)
+  SANITIZED_NAME=$(echo "$CUSTOM_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
+  INSTANCE_NAME="wp-test-$SANITIZED_NAME"
+else
+  INSTANCE_NAME="wp-test-$(date +%Y%m%d-%H%M%S)"
+fi
 
 echo "Creating WordPress test environment: $INSTANCE_NAME"
 echo "=================================================="
+
+# Check if directory already exists
+if [ -d "$INSTANCE_NAME" ]; then
+  echo "ERROR: Directory '$INSTANCE_NAME' already exists!"
+  echo "Please choose a different name or clean up the existing directory."
+  exit 1
+fi
 
 # Create project directory
 mkdir -p "$INSTANCE_NAME"
@@ -79,15 +101,20 @@ check_wp_installed() {
   return $?
 }
 
-# Function to check database connection
+# Fixed function to check database connection using correct credentials
 check_db_connection() {
-  # First check if WordPress container is ready
-  if ! docker-compose exec -T wordpress test -f /var/www/html/wp-config.php 2>/dev/null; then
-    return 1
-  fi
-  # Then check database connection
-  docker-compose exec -T wordpress wp db check --allow-root 2>/dev/null
+  # Test database connectivity using the WordPress container with correct credentials
+  docker-compose exec -T wordpress mysql -h db -u wordpress -pwordpress -e "SELECT 1;" wordpress 2>/dev/null
   return $?
+}
+
+# Function to check if containers are healthy
+check_containers_healthy() {
+  # Check if both containers are running
+  local db_status=$(docker-compose ps -q db | xargs docker inspect --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+  local wp_status=$(docker-compose ps -q wordpress | xargs docker inspect --format='{{.State.Status}}' 2>/dev/null || echo "none")
+  
+  [ "$db_status" = "healthy" ] && [ "$wp_status" = "running" ]
 }
 
 echo ""
@@ -115,6 +142,15 @@ echo "✓ Containers are running"
 echo "Waiting for database connection..."
 MAX_DB_WAIT=60
 DB_WAIT=0
+
+# First wait for the database container to be healthy
+while ! check_containers_healthy && [ $DB_WAIT -lt $MAX_DB_WAIT ]; do
+  echo "  Waiting for containers to be healthy... ($DB_WAIT/$MAX_DB_WAIT seconds)"
+  sleep 5
+  DB_WAIT=$((DB_WAIT + 5))
+done
+
+# Then test the actual database connection
 while ! check_db_connection && [ $DB_WAIT -lt $MAX_DB_WAIT ]; do
   echo "  Database not ready yet... ($DB_WAIT/$MAX_DB_WAIT seconds)"
   sleep 5
@@ -125,6 +161,9 @@ if [ $DB_WAIT -ge $MAX_DB_WAIT ]; then
   echo "ERROR: Database connection timed out!"
   echo "Database logs:"
   docker-compose logs db
+  echo ""
+  echo "WordPress logs:"
+  docker-compose logs wordpress
   exit 1
 fi
 
@@ -162,6 +201,7 @@ fi
 echo ""
 echo "WordPress Site Creation Complete!"
 echo "================================="
+echo "Instance Name: $INSTANCE_NAME"
 echo "Site URL: http://localhost:8080"
 echo "Admin URL: http://localhost:8080/wp-admin"
 echo "Admin login: jerry / garcia"
@@ -189,8 +229,8 @@ echo "Final status check:"
 echo "==================="
 docker-compose ps
 
-# Check for any errors in logs
-if docker-compose logs 2>&1 | grep -i error | head -5; then
+# Check for any actual errors in logs (ignore the access denied messages which are expected)
+if docker-compose logs 2>&1 | grep -i error | grep -v "Access denied" | head -5; then
   echo ""
   echo "Note: Some errors were found in the logs above. The site may still work correctly."
 fi
