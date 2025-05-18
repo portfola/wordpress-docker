@@ -39,13 +39,21 @@ services:
       WORDPRESS_ADMIN_EMAIL: admin@example.com
     networks:
       - wordpress_net
-    # Add this command to run the installer after container starts
+    # Modified startup command to ensure proper initialization
     command: >
       bash -c "
+        # Start Apache in background
         apache2-foreground &
-        sleep 10 &&
-        /usr/local/bin/wp-installer.sh &&
-        wait
+        APACHE_PID=$$!
+        
+        # Wait a moment for Apache to start
+        sleep 5
+        
+        # Run our installer script
+        /usr/local/bin/wp-installer.sh
+        
+        # Keep Apache running
+        wait $$APACHE_PID
       "
 
 networks:
