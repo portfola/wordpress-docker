@@ -9,6 +9,9 @@ This Docker setup provides a complete WordPress development environment with wp-
 - `create-wp-site.sh` - Script to create a new WordPress instance
 - `wp-installer.sh` - Handles WordPress installation and configuration
 - `cleanup-wp-sites.sh` - Utility script to clean up WordPress test sites
+- `setup.sh` - Initial setup script for the environment
+- `check-platform.sh` - Detects OS and Docker environment
+- `.gitattributes` - Ensures consistent line endings across platforms
 - `.gitignore` - Git ignore rules for WordPress development
 
 ## Getting Started
@@ -26,18 +29,43 @@ This Docker setup provides a complete WordPress development environment with wp-
    cd wordpress-docker
    ```
 
-2. Start the containers:
+2. Run the setup script:
    ```bash
-   docker-compose up -d
+   ./setup.sh
    ```
 
-3. Wait for WordPress to be installed automatically (this may take a minute).
+3. Create a new WordPress site:
+   ```bash
+   ./create-wp-site.sh
+   ```
 
 4. Access your WordPress site at http://localhost:8080
 
 5. Log in to the WordPress admin at http://localhost:8080/wp-admin using:
    - Username: jerry
    - Password: garcia
+
+### Platform-Specific Notes
+
+#### Windows Users (Git Bash)
+```bash
+# Clone and setup
+git clone <repository-url>
+cd wordpress-docker
+
+# Run setup
+./setup.sh
+
+# Create site
+./create-wp-site.sh
+```
+
+#### macOS/Linux Users
+```bash
+# Same commands work!
+./setup.sh
+./create-wp-site.sh
+```
 
 ## Configuration
 
@@ -98,6 +126,12 @@ Use the `create-wp-site.sh` script to create new WordPress instances:
 ./create-wp-site.sh
 ```
 
+To clean up previous instances before creating a new one:
+
+```bash
+./create-wp-site.sh -c
+```
+
 ## Cleanup
 
 To remove test sites and clean up resources:
@@ -106,12 +140,19 @@ To remove test sites and clean up resources:
 ./cleanup-wp-sites.sh
 ```
 
+For non-interactive cleanup (useful in scripts):
+
+```bash
+./cleanup-wp-sites.sh -f
+```
+
 ## Troubleshooting
 
 - View container logs: `docker-compose logs`
 - Reset environment: `docker-compose down -v` (warning: deletes all data)
 - Access container shell: `docker-compose exec wordpress bash`
 - Check container status: `docker-compose ps`
+- Check platform compatibility: `./check-platform.sh`
 
 ## Maintenance
 
@@ -124,3 +165,4 @@ To remove test sites and clean up resources:
 - This setup is for development purposes only
 - Default credentials should be changed in production
 - Consider using Docker secrets for sensitive data in production
+
