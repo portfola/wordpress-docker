@@ -18,6 +18,10 @@ RUN chown www-data:www-data /usr/local/bin/wp
 RUN mkdir -p /var/www/.wp-cli
 RUN chown www-data:www-data /var/www/.wp-cli
 
+# Create custom PHP configuration to increase memory limits
+RUN echo "memory_limit = 512M" > /usr/local/etc/php/conf.d/memory-limit.ini
+RUN echo "max_execution_time = 300" >> /usr/local/etc/php/conf.d/memory-limit.ini
+
 # Set working directory
 WORKDIR /var/www/html
 
