@@ -44,9 +44,10 @@ get_site_info() {
   
   if [ -f "$site_dir/docker-compose.yml" ]; then
     cd "$site_dir"
-    if docker-compose ps -q | grep -q .; then
+    # Suppress the APACHE_PID warning by checking container status directly
+    if docker-compose ps --services --filter="status=running" 2>/dev/null | grep -q .; then
       # Check if containers are actually running
-      if docker-compose ps | grep -q "Up"; then
+      if docker-compose ps 2>/dev/null | grep -q "Up"; then
         status="Running"
         url="http://localhost:$port"
       else

@@ -226,7 +226,7 @@ services:
         
         # Start Apache in background
         apache2-foreground &
-        APACHE_PID=\$!
+        export APACHE_PID=\$!
         
         # Wait a moment for Apache to start
         sleep 5
