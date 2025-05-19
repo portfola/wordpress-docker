@@ -157,22 +157,28 @@ show_ports() {
 find_next_port() {
   local port=8080
   while [ $port -le 8200 ]; do
-    if ! netstat -tuln 2>/dev/null | grep -q ":$port " && ! ss -tuln 2>/dev/null | grep -q ":$port "; then
-      # Also check if any of our sites are configured for this port
-      local port_used=0
+    # Check if port is used by system services
+    local port_in_use=0
+    if netstat -tuln 2>/dev/null | grep -q ":$port " || ss -tuln 2>/dev/null | grep -q ":$port "; then
+      port_in_use=1
+    fi
+    
+    # Also check if any of our sites are configured for this port
+    if [ $port_in_use -eq 0 ]; then
       for dir in wp-test-*; do
-        if [ -d "$dir" ]; then
+        if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
           local site_port=$(get_site_port "$dir")
           if [ "$site_port" = "$port" ]; then
-            port_used=1
+            port_in_use=1
             break
           fi
         fi
       done
-      if [ $port_used -eq 0 ]; then
-        echo $port
-        return 0
-      fi
+    fi
+    
+    if [ $port_in_use -eq 0 ]; then
+      echo $port
+      return 0
     fi
     ((port++))
   done
