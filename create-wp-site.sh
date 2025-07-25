@@ -230,6 +230,13 @@ services:
         
         # Wait a moment for Apache to start
         sleep 5
+
+        # Fix wp-content permissions for Windows/WSL compatibility
+        # This prevents plugin installation issues
+        mkdir -p /var/www/html/wp-content/upgrade
+        mkdir -p /var/www/html/wp-content/uploads
+        chown -R www-data:www-data /var/www/html/wp-content 2>/dev/null || true
+        chmod -R 755 /var/www/html/wp-content 2>/dev/null || true
         
         # Run our installer script
         /usr/local/bin/wp-installer.sh
