@@ -58,7 +58,6 @@ services:
         
         # Start Apache in background
         apache2-foreground &
-        APACHE_PID=$$!
         
         # Wait a moment for Apache to start
         sleep 5
@@ -71,7 +70,7 @@ services:
         /usr/local/bin/wp-installer.sh
         
         # Keep Apache running
-        wait $$APACHE_PID
+        wait $!
 
 networks:
   wordpress_net:
