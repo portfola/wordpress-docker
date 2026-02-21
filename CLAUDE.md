@@ -31,10 +31,11 @@ This is a **WordPress Docker Development Environment** that enables quick creati
 
 3. **Management Scripts** (in root directory)
    - `create-wp-site.sh` - Creates new sites with custom naming, optional port specification, optional cleanup
+   - `import-wp-site.sh` - Imports WordPress sites from downloaded database dump and wp-content directory
    - `list-wp-sites.sh` - Multi-site management (list, start, stop, remove operations)
    - `cleanup-wp-sites.sh` - Bulk site removal with force mode
    - `wp-dev.sh` - Interactive menu system for common operations
-   - `setup.sh` - One-time initialization (fixes line endings, creates wp-content dirs)
+   - `setup.sh` - One-time initialization (fixes line endings, makes scripts executable)
    - `check-platform.sh` - Detects OS and Docker environment
 
 ### Key Technical Details
@@ -62,6 +63,29 @@ This is a **WordPress Docker Development Environment** that enables quick creati
 # Quick create via interactive menu
 ./wp-dev.sh
 ```
+
+### Site Import from Local Files
+
+```bash
+# Import with auto-detected port (from downloaded database and wp-content directory)
+./import-wp-site.sh -n myclient -d ~/downloads/myclient.sql -w ~/downloads/wp-content
+
+# Import from tar.gz dump of wp-content
+./import-wp-site.sh -n staging -d /tmp/db.sql -w /tmp/wp-content.tar.gz -p 8085
+
+# Clean up existing sites first, then import
+./import-wp-site.sh -c -n oldsite -d ~/oldsite.sql -w ~/oldsite-wp-content.tar.gz
+
+# Interactive import via menu
+./wp-dev.sh  # Select option 8
+```
+
+The import script:
+- Accepts a database dump file (`.sql`) and local `wp-content` as a directory, `.tar`, or `.tar.gz`
+- Auto-detects the live site URL from the database
+- Performs URL search-replace to update all references to localhost (handles www variants and https)
+- Resets admin credentials to `jerry/garcia`
+- Automatically flushes rewrite rules
 
 ### Multi-Site Management
 
@@ -230,10 +254,6 @@ wordpress-docker/
 │   ├── manage-site.sh          # Site management script
 │   └── site-info.txt           # Site metadata
 ├── wp-test-project2/           # Additional sites
-├── wp-content/                 # Root wp-content (shared template during setup)
-│   ├── themes/
-│   ├── plugins/
-│   └── uploads/
 ├── Dockerfile                  # Custom WordPress image definition
 ├── docker-compose.yml          # Root template (referenced in create script)
 ├── create-wp-site.sh           # Main site creation script

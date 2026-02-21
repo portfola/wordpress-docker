@@ -1,5 +1,5 @@
 #!/bin/bash
-# cleanup-wp-sites.sh - Fixed version with better error handling
+# cleanup-wp-sites.sh - Fixed version with Docker-based permission handling
 
 set -euo pipefail
 
@@ -29,61 +29,77 @@ echo "Checking for WordPress test environments..."
 for dir in $(find . -maxdepth 1 -type d -name "wp-test-*" 2>/dev/null || true); do
   if [ -f "$dir/docker-compose.yml" ]; then
     echo "Found test environment in $dir"
-    
+
     # Check if containers are running
     cd "$dir"
-    
+
     # Use a more robust way to check for running containers
     if docker-compose ps --services --filter="status=running" 2>/dev/null | grep -q .; then
       echo "Active containers found in $dir"
-      
+
       # Prompt before stopping if containers are running and not in force mode
       if [ $FORCE -eq 0 ]; then
         read -p "Stop containers in $dir? (y/n): " choice
-        case "$choice" in 
-          y|Y ) 
-            echo "Stopping and removing containers in $dir"
+        case "$choice" in
+          y|Y )
+            echo "Stopping containers and fixing permissions in $dir"
+            # Fix wp-content permissions FROM INSIDE THE CONTAINER (where we have www-data access)
+            if [ -d "wp-content" ]; then
+              echo "  Fixing wp-content permissions via Docker..."
+              docker-compose exec -T wordpress chmod -R 755 /var/www/html/wp-content 2>/dev/null || true
+            fi
             docker-compose down -v || echo "Warning: Failed to clean up $dir"
-            
-            # Remove any local wp-content directory
+
+            # Now remove wp-content directory
             if [ -d "wp-content" ]; then
               echo "Removing wp-content directory in $dir"
               rm -rf "wp-content"
             fi
-            
+
             cd ..
             echo "Removing directory $dir"
             rm -rf "$dir"
             ;;
-          * ) 
+          * )
             echo "Skipping $dir (containers still running)"
             cd ..
             ;;
         esac
       else
         # Force mode - clean up without prompting
-        echo "Force stopping and removing containers in $dir"
+        echo "Stopping containers and fixing permissions in $dir"
+        # Fix wp-content permissions FROM INSIDE THE CONTAINER (where we have www-data access)
+        if [ -d "wp-content" ]; then
+          echo "  Fixing wp-content permissions via Docker..."
+          docker-compose exec -T wordpress chmod -R 755 /var/www/html/wp-content 2>/dev/null || true
+        fi
         docker-compose down -v || echo "Warning: Failed to clean up $dir"
-        
-        # Remove any local wp-content directory
+
+        # Now remove wp-content directory
         if [ -d "wp-content" ]; then
           echo "Removing wp-content directory in $dir"
           rm -rf "wp-content"
         fi
-        
+
         cd ..
         echo "Removing directory $dir"
         rm -rf "$dir"
       fi
     else
       echo "No active containers in $dir"
-      
-      # Remove any local wp-content directory
+
+      # For stopped containers, try to start just the WordPress service temporarily to fix permissions
       if [ -d "wp-content" ]; then
+        echo "Starting WordPress container temporarily to fix permissions..."
+        docker-compose up -d wordpress db 2>/dev/null || true
+        sleep 5
+        docker-compose exec -T wordpress chmod -R 755 /var/www/html/wp-content 2>/dev/null || true
+        docker-compose down 2>/dev/null || true
+
         echo "Removing wp-content directory in $dir"
         rm -rf "wp-content"
       fi
-      
+
       cd ..
       echo "Removing directory $dir"
       rm -rf "$dir"
@@ -104,12 +120,12 @@ if [ -n "$ORPHANED_VOLUMES" ]; then
     echo "Found orphaned WordPress volumes:"
     echo "$ORPHANED_VOLUMES"
     read -p "Remove orphaned volumes? (y/n): " choice
-    case "$choice" in 
-      y|Y ) 
+    case "$choice" in
+      y|Y )
         echo "$ORPHANED_VOLUMES" | xargs -r docker volume rm
         echo "Orphaned volumes removed"
         ;;
-      * ) 
+      * )
         echo "Skipping orphaned volume cleanup"
         ;;
     esac
@@ -136,12 +152,12 @@ if [ -n "$ORPHANED_NETWORKS" ]; then
     echo "Found orphaned WordPress networks:"
     echo "$ORPHANED_NETWORKS"
     read -p "Remove orphaned networks? (y/n): " choice
-    case "$choice" in 
-      y|Y ) 
+    case "$choice" in
+      y|Y )
         echo "$ORPHANED_NETWORKS" | xargs -r docker network rm
         echo "Orphaned networks removed"
         ;;
-      * ) 
+      * )
         echo "Skipping orphaned network cleanup"
         ;;
     esac

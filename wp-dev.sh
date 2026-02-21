@@ -24,9 +24,10 @@ show_menu() {
     echo "5) Clean up all sites"
     echo "6) Show port usage"
     echo "7) Quick site creation with auto port"
-    echo "8) Exit"
+    echo "8) Import site from local files"
+    echo "9) Exit"
     echo ""
-    read -p "Enter your choice (1-8): " choice
+    read -p "Enter your choice (1-9): " choice
 }
 
 # Function to create new site with prompts
@@ -74,7 +75,7 @@ quick_create() {
         echo -e "${RED}Error: Site name cannot be empty${NC}"
         return 1
     fi
-    
+
     # Find next available port automatically
     next_port=8080
     while [ $next_port -le 8200 ]; do
@@ -96,9 +97,74 @@ quick_create() {
         fi
         ((next_port++))
     done
-    
+
     echo "Creating site on port $next_port..."
     ./create-wp-site.sh -n "$site_name" -p "$next_port"
+}
+
+# Function to import site from local files
+import_site_interactive() {
+    echo ""
+    echo -e "${GREEN}Importing WordPress Site${NC}"
+    echo "============================"
+
+    # Get site name
+    read -p "Enter local site name (will become wp-test-SITENAME): " site_name
+    if [ -z "$site_name" ]; then
+        echo -e "${RED}Error: Site name cannot be empty${NC}"
+        return 1
+    fi
+
+    # Get database file path
+    read -p "Enter path to SQL database dump file: " db_file
+    if [ -z "$db_file" ]; then
+        echo -e "${RED}Error: Database file path cannot be empty${NC}"
+        return 1
+    fi
+
+    # Get wp-content directory path
+    read -p "Enter path to wp-content directory: " wp_content_path
+    if [ -z "$wp_content_path" ]; then
+        echo -e "${RED}Error: wp-content path cannot be empty${NC}"
+        return 1
+    fi
+
+    # Get optional port
+    read -p "Enter port (leave blank for auto-detect): " custom_port
+
+    # Ask about cleanup
+    if ls -d wp-test-* >/dev/null 2>&1; then
+        echo ""
+        echo "Existing sites found:"
+        ./list-wp-sites.sh list
+        echo ""
+        read -p "Clean up existing sites first? (y/n): " cleanup
+        case $cleanup in
+            [Yy]* )
+                if [ -z "$custom_port" ]; then
+                    ./import-wp-site.sh -c -n "$site_name" -d "$db_file" -w "$wp_content_path"
+                else
+                    ./import-wp-site.sh -c -n "$site_name" -d "$db_file" -w "$wp_content_path" -p "$custom_port"
+                fi
+                return $?
+                ;;
+            * )
+                if [ -z "$custom_port" ]; then
+                    ./import-wp-site.sh -n "$site_name" -d "$db_file" -w "$wp_content_path"
+                else
+                    ./import-wp-site.sh -n "$site_name" -d "$db_file" -w "$wp_content_path" -p "$custom_port"
+                fi
+                return $?
+                ;;
+        esac
+    else
+        if [ -z "$custom_port" ]; then
+            ./import-wp-site.sh -n "$site_name" -d "$db_file" -w "$wp_content_path"
+        else
+            ./import-wp-site.sh -n "$site_name" -d "$db_file" -w "$wp_content_path" -p "$custom_port"
+        fi
+        return $?
+    fi
 }
 
 # Function to get container status summary
@@ -179,6 +245,9 @@ while true; do
             quick_create
             ;;
         8)
+            import_site_interactive
+            ;;
+        9)
             echo ""
             echo -e "${GREEN}Goodbye!${NC}"
             exit 0

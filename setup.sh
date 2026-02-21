@@ -15,13 +15,6 @@ for script in *.sh; do
     chmod +x "$script"
 done
 
-# Create wp-content directory if it doesn't exist
-mkdir -p wp-content/themes wp-content/plugins wp-content/uploads
-
-# Set appropriate permissions (Unix-like systems only)
-if [[ "$PLATFORM" != "windows" ]]; then
-    chmod -R 755 wp-content/
-fi
 
 echo "=== Setup complete! ==="
 echo "Run: ./create-wp-site.sh to create a new WordPress site"
