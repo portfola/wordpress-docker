@@ -140,6 +140,16 @@ if [ -n "$CUSTOM_PORT" ]; then
   fi
 fi
 
+# Convert paths to absolute before changing directories
+if command -v realpath &> /dev/null; then
+  DB_FILE=$(realpath "$DB_FILE")
+  WP_CONTENT_DIR=$(realpath "$WP_CONTENT_DIR")
+else
+  # Fallback for systems without realpath
+  DB_FILE=$(cd "$(dirname "$DB_FILE")" && pwd)/$(basename "$DB_FILE")
+  WP_CONTENT_DIR=$(cd "$(dirname "$WP_CONTENT_DIR")" && pwd)/$(basename "$WP_CONTENT_DIR")
+fi
+
 # Perform cleanup if requested
 if [ $CLEANUP -eq 1 ]; then
   echo "Running cleanup of previous WordPress test instances..."
@@ -486,13 +496,13 @@ if [ -n "$ADMIN_ID" ]; then
   # Update first admin user to jerry/garcia
   docker-compose exec -T wordpress wp user update "$ADMIN_ID" \
     --user_login=jerry \
-    --user_email=admin@example.com \
+    --user_email=jerry@example.com \
     --allow-root 2>/dev/null || true
   docker-compose exec -T wordpress wp user list --allow-root 2>/dev/null | grep jerry > /dev/null || \
-    docker-compose exec -T wordpress wp user create jerry admin@example.com --role=administrator --allow-root 2>/dev/null || true
+    docker-compose exec -T wordpress wp user create jerry jerry@example.com --role=administrator --allow-root 2>/dev/null || true
 else
   # Create jerry admin if no admin exists
-  docker-compose exec -T wordpress wp user create jerry admin@example.com --role=administrator --allow-root 2>/dev/null || true
+  docker-compose exec -T wordpress wp user create jerry jerry@example.com --role=administrator --allow-root 2>/dev/null || true
 fi
 
 # Set password for jerry user

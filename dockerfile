@@ -1,5 +1,5 @@
 # Use the official WordPress image as our base
-FROM wordpress:6.9-php7.4-apache
+FROM wordpress:latest
 
 # Install dependencies needed for wp-cli and cross-platform compatibility
 RUN apt-get update && apt-get install -y \
