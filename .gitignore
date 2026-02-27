@@ -1,6 +1,7 @@
 # WordPress paths
 /wp-content
 /wp-test*
+/imports
 
 # User-specific environment files
 .env
