@@ -72,6 +72,22 @@ services:
         # Keep Apache running
         wait $!
 
+  # phpMyAdmin Service
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: wp-test-phpmyadmin-8080
+    ports:
+      - "8180:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: wordpress
+      PMA_PASSWORD: wordpress
+      PMA_DB: wordpress
+    depends_on:
+      - db
+    networks:
+      - wordpress_net
+
 networks:
   wordpress_net:
 

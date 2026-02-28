@@ -163,94 +163,17 @@ cd "$INSTANCE_NAME"
 # Copy Docker files
 cp ../dockerfile Dockerfile
 cp ../wp-installer.sh wp-installer.sh
+cp ../docker-compose.yml docker-compose.yml
 
-# Create modified docker-compose.yml with custom port
-cat > docker-compose.yml << EOF
-services:
-  # MySQL Service
-  db:
-    image: mysql:5.7
-    platform: linux/amd64
-    volumes:
-      - db_data:/var/lib/mysql
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: wordpress
-      MYSQL_USER: wordpress
-      MYSQL_PASSWORD: wordpress
-    networks:
-      - wordpress_net
-    # Health check
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 20s
-      retries: 5
-      interval: 5s
+# Calculate phpMyAdmin port (WordPress port + 100)
+PMA_PORT=$((WP_PORT + 100))
 
-  # WordPress Service
-  wordpress:
-    build: 
-      context: .
-      dockerfile: Dockerfile
-    platform: linux/amd64
-    image: wp-wordpress
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "$WP_PORT:80"
-    restart: always
-    volumes:
-      - wp_data:/var/www/html
-      # Use conditional mounting for wp-content
-      - \${PWD}/wp-content:/var/www/html/wp-content:delegated
-    environment:
-      WORDPRESS_DB_HOST: db
-      WORDPRESS_DB_NAME: wordpress
-      WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: wordpress
-      WORDPRESS_SITE_URL: http://localhost:$WP_PORT
-      WORDPRESS_SITE_TITLE: WordPress Dev - $INSTANCE_NAME
-      WORDPRESS_ADMIN_USER: jerry
-      WORDPRESS_ADMIN_PASSWORD: garcia
-      WORDPRESS_ADMIN_EMAIL: admin@example.com
-    networks:
-      - wordpress_net
-    # Simplified startup command
-    entrypoint: ["/bin/bash", "-c"]
-    command: 
-      - |
-        # Fix any potential line ending issues
-        dos2unix /usr/local/bin/wp-installer.sh 2>/dev/null || true
-        
-        # Start Apache in background
-        apache2-foreground &
-        export APACHE_PID=\$!
-        
-        # Wait a moment for Apache to start
-        sleep 5
-
-        # Fix wp-content permissions for Windows/WSL compatibility
-        # This prevents plugin installation issues
-        mkdir -p /var/www/html/wp-content/upgrade
-        mkdir -p /var/www/html/wp-content/uploads
-        chown -R www-data:www-data /var/www/html/wp-content 2>/dev/null || true
-        chmod -R 755 /var/www/html/wp-content 2>/dev/null || true
-        
-        # Run our installer script
-        /usr/local/bin/wp-installer.sh
-        
-        # Keep Apache running
-        wait \$APACHE_PID
-
-networks:
-  wordpress_net:
-
-volumes:
-  db_data:
-  wp_data:
-EOF
+# Substitute port and instance name variables in docker-compose.yml
+sed -i "s|8080:80|$WP_PORT:80|g" docker-compose.yml
+sed -i "s|8180:80|$PMA_PORT:80|g" docker-compose.yml
+sed -i "s|http://localhost:8080|http://localhost:$WP_PORT|g" docker-compose.yml
+sed -i "s|wp-test-phpmyadmin-8080|wp-test-phpmyadmin-$WP_PORT|g" docker-compose.yml
+sed -i "s|WordPress Dev - Jerry's WordPress Dev|WordPress Dev - $INSTANCE_NAME|g" docker-compose.yml
 
 # Remove any existing wp-content directory if it exists
 rm -rf wp-content
@@ -266,6 +189,14 @@ Admin Username: jerry
 Admin Password: garcia
 Created: $(date)
 Directory: $(pwd)
+
+phpMyAdmin Information
+======================
+Access URL: http://localhost:$PMA_PORT
+Server: db
+Username: wordpress
+Password: wordpress
+Database: wordpress
 
 Quick Commands:
 --------------
