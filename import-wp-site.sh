@@ -153,14 +153,28 @@ if [ -d "$WP_CONTENT_DIR" ]; then
   cp -r "$WP_CONTENT_DIR" wp-content
 elif [ -f "$WP_CONTENT_DIR" ] && [[ "$WP_CONTENT_DIR" == *.tar.gz ]]; then
   echo "Extracting wp-content from tar.gz..."
-  mkdir -p wp-content
-  tar -xzf "$WP_CONTENT_DIR" -C wp-content --strip-components=1 2>/dev/null || \
-    tar -xzf "$WP_CONTENT_DIR" -C wp-content
+  EXTRACT_TMP=$(mktemp -d)
+  tar -xzf "$WP_CONTENT_DIR" -C "$EXTRACT_TMP"
+  FOUND_WP=$(find "$EXTRACT_TMP" -type d -name "wp-content" | head -n 1)
+  if [ -z "$FOUND_WP" ]; then
+    echo "ERROR: Could not find wp-content directory in archive" >&2
+    rm -rf "$EXTRACT_TMP"
+    exit 1
+  fi
+  cp -r "$FOUND_WP" wp-content
+  rm -rf "$EXTRACT_TMP"
 elif [ -f "$WP_CONTENT_DIR" ] && [[ "$WP_CONTENT_DIR" == *.tar ]]; then
   echo "Extracting wp-content from tar..."
-  mkdir -p wp-content
-  tar -xf "$WP_CONTENT_DIR" -C wp-content --strip-components=1 2>/dev/null || \
-    tar -xf "$WP_CONTENT_DIR" -C wp-content
+  EXTRACT_TMP=$(mktemp -d)
+  tar -xf "$WP_CONTENT_DIR" -C "$EXTRACT_TMP"
+  FOUND_WP=$(find "$EXTRACT_TMP" -type d -name "wp-content" | head -n 1)
+  if [ -z "$FOUND_WP" ]; then
+    echo "ERROR: Could not find wp-content directory in archive" >&2
+    rm -rf "$EXTRACT_TMP"
+    exit 1
+  fi
+  cp -r "$FOUND_WP" wp-content
+  rm -rf "$EXTRACT_TMP"
 else
   echo "ERROR: wp-content must be a directory or tar/tar.gz file: $WP_CONTENT_DIR" >&2
   exit 1
@@ -182,11 +196,11 @@ echo "Importing database..."
 echo "===================="
 
 echo "Dropping existing database and importing new data..."
-docker-compose exec -T wordpress bash -c \
-  "mysql -h db -u wordpress -pwordpress -e 'DROP DATABASE IF EXISTS wordpress; CREATE DATABASE wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'"
+docker-compose exec -T db bash -c \
+  "mysql -u wordpress -pwordpress -e 'DROP DATABASE IF EXISTS wordpress; CREATE DATABASE wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'"
 
-docker-compose exec -T wordpress bash -c \
-  "mysql -h db -u wordpress -pwordpress wordpress" < "$DB_FILE"
+docker-compose exec -T db bash -c \
+  "mysql -u wordpress -pwordpress wordpress" < "$DB_FILE"
 
 echo "✓ Database imported successfully"
 
@@ -244,9 +258,30 @@ fi
 # Flush rewrite rules
 # ---------------------------------------------------------------------------
 echo ""
-echo "Flushing rewrite rules..."
-docker-compose exec -T wordpress wp rewrite flush --allow-root 2>/dev/null || true
-echo "✓ Rewrite rules flushed"
+echo "Refreshing permalinks..."
+PERMALINK_STRUCTURE=$(docker-compose exec -T wordpress wp option get permalink_structure --allow-root 2>/dev/null | tr -d '[:space:]' || true)
+if [ -n "$PERMALINK_STRUCTURE" ]; then
+  docker-compose exec -T wordpress wp rewrite structure "$PERMALINK_STRUCTURE" --allow-root 2>/dev/null || true
+fi
+docker-compose exec -T wordpress wp rewrite flush --hard --allow-root 2>/dev/null || true
+# wp rewrite flush --hard can't write .htaccess due to filesystem permissions; write it directly
+docker-compose exec -T wordpress bash -c '
+if [ ! -s /var/www/html/.htaccess ]; then
+  cat > /var/www/html/.htaccess << "HTEOF"
+# BEGIN WordPress
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+# END WordPress
+HTEOF
+fi
+'
+echo "✓ Permalinks refreshed"
 
 # ---------------------------------------------------------------------------
 # Reset admin credentials
@@ -256,20 +291,43 @@ echo "Resetting admin credentials..."
 ADMIN_ID=$(docker-compose exec -T wordpress wp user list --field=ID --role=administrator --allow-root 2>/dev/null | head -n 1)
 
 if [ -n "$ADMIN_ID" ]; then
-  docker-compose exec -T wordpress wp user update "$ADMIN_ID" \
-    --user_login=jerry \
-    --user_email=jerry@example.com \
+  # wp user update cannot change user_login — must do it directly in the DB
+  docker-compose exec -T db mysql -u wordpress -pwordpress wordpress \
+    -e "UPDATE wp_users SET user_login='jerry', user_email='jerry@example.com' WHERE ID=$ADMIN_ID;" 2>/dev/null || true
+  docker-compose exec -T wordpress wp user update jerry \
+    --user_pass=garcia \
     --allow-root 2>/dev/null || true
-  docker-compose exec -T wordpress wp user list --allow-root 2>/dev/null | grep jerry > /dev/null || \
-    docker-compose exec -T wordpress wp user create jerry jerry@example.com --role=administrator --allow-root 2>/dev/null || true
 else
-  docker-compose exec -T wordpress wp user create jerry jerry@example.com --role=administrator --allow-root 2>/dev/null || true
+  docker-compose exec -T wordpress wp user create jerry jerry@example.com \
+    --role=administrator \
+    --user_pass=garcia \
+    --allow-root 2>/dev/null || true
 fi
 
-docker-compose exec -T wordpress wp user list --allow-root 2>/dev/null | grep -q jerry && \
-  docker-compose exec -T wordpress wp user update jerry --prompt=user_pass --allow-root <<< "garcia" 2>/dev/null || true
-
 echo "✓ Admin credentials reset (jerry/garcia)"
+
+# ---------------------------------------------------------------------------
+# Activate theme
+# ---------------------------------------------------------------------------
+echo ""
+echo "Checking active theme..."
+ACTIVE_THEME=$(docker-compose exec -T wordpress wp option get template --allow-root 2>/dev/null | tr -d '[:space:]')
+THEME_EXISTS=$(docker-compose exec -T wordpress wp theme list --field=name --allow-root 2>/dev/null | grep -x "$ACTIVE_THEME" || true)
+
+if [ -z "$THEME_EXISTS" ]; then
+  # Active theme is missing — find any non-default theme in wp-content/themes and activate it
+  IMPORTED_THEME=$(docker-compose exec -T wordpress wp theme list --field=name --allow-root 2>/dev/null \
+    | grep -v -E '^twenty' | head -n 1 | tr -d '[:space:]' || true)
+  if [ -n "$IMPORTED_THEME" ]; then
+    echo "Active theme '$ACTIVE_THEME' not found — activating '$IMPORTED_THEME'..."
+    docker-compose exec -T wordpress wp theme activate "$IMPORTED_THEME" --allow-root 2>/dev/null || true
+    echo "✓ Theme '$IMPORTED_THEME' activated"
+  else
+    echo "WARNING: Active theme '$ACTIVE_THEME' not found and no imported theme available"
+  fi
+else
+  echo "✓ Active theme '$ACTIVE_THEME' is present"
+fi
 
 # ---------------------------------------------------------------------------
 # Site info file
