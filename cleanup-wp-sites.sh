@@ -42,18 +42,13 @@ for dir in $(find . -maxdepth 1 -type d -name "wp-test-*" 2>/dev/null || true); 
         read -p "Stop containers in $dir? (y/n): " choice
         case "$choice" in
           y|Y )
-            echo "Stopping containers and fixing permissions in $dir"
-            # Fix wp-content permissions FROM INSIDE THE CONTAINER (where we have www-data access)
-            if [ -d "wp-content" ]; then
-              echo "  Fixing wp-content permissions via Docker..."
-              docker-compose exec -T wordpress chmod -R 755 /var/www/html/wp-content 2>/dev/null || true
-            fi
+            echo "Stopping containers in $dir"
             docker-compose down -v || echo "Warning: Failed to clean up $dir"
 
-            # Now remove wp-content directory
+            # Fix permissions and remove wp-content via a temporary container
             if [ -d "wp-content" ]; then
               echo "Removing wp-content directory in $dir"
-              rm -rf "wp-content"
+              docker run --rm -v "$(pwd)/wp-content:/wp-content" alpine sh -c "chmod -R 777 /wp-content && rm -rf /wp-content" 2>/dev/null || sudo rm -rf "wp-content"
             fi
 
             cd ..
@@ -67,18 +62,13 @@ for dir in $(find . -maxdepth 1 -type d -name "wp-test-*" 2>/dev/null || true); 
         esac
       else
         # Force mode - clean up without prompting
-        echo "Stopping containers and fixing permissions in $dir"
-        # Fix wp-content permissions FROM INSIDE THE CONTAINER (where we have www-data access)
-        if [ -d "wp-content" ]; then
-          echo "  Fixing wp-content permissions via Docker..."
-          docker-compose exec -T wordpress chmod -R 755 /var/www/html/wp-content 2>/dev/null || true
-        fi
+        echo "Stopping containers in $dir"
         docker-compose down -v || echo "Warning: Failed to clean up $dir"
 
-        # Now remove wp-content directory
+        # Fix permissions and remove wp-content via a temporary container
         if [ -d "wp-content" ]; then
           echo "Removing wp-content directory in $dir"
-          rm -rf "wp-content"
+          docker run --rm -v "$(pwd)/wp-content:/wp-content" alpine sh -c "chmod -R 777 /wp-content && rm -rf /wp-content" 2>/dev/null || sudo rm -rf "wp-content"
         fi
 
         cd ..
@@ -88,16 +78,9 @@ for dir in $(find . -maxdepth 1 -type d -name "wp-test-*" 2>/dev/null || true); 
     else
       echo "No active containers in $dir"
 
-      # For stopped containers, try to start just the WordPress service temporarily to fix permissions
       if [ -d "wp-content" ]; then
-        echo "Starting WordPress container temporarily to fix permissions..."
-        docker-compose up -d wordpress db 2>/dev/null || true
-        sleep 5
-        docker-compose exec -T wordpress chmod -R 755 /var/www/html/wp-content 2>/dev/null || true
-        docker-compose down 2>/dev/null || true
-
         echo "Removing wp-content directory in $dir"
-        rm -rf "wp-content"
+        docker run --rm -v "$(pwd)/wp-content:/wp-content" alpine sh -c "chmod -R 777 /wp-content && rm -rf /wp-content" 2>/dev/null || sudo rm -rf "wp-content"
       fi
 
       cd ..
