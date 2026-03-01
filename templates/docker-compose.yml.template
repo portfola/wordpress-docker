@@ -1,0 +1,94 @@
+services:
+  # MySQL Service
+  db:
+    image: mysql:8.0
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    networks:
+      - wordpress_net
+    # Health check
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      timeout: 20s
+      retries: 5
+      interval: 5s
+      start_period: 30s
+
+  # WordPress Service
+  wordpress:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    image: wp-wordpress
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "{{WP_PORT}}:80"
+    restart: always
+    volumes:
+      - wp_data:/var/www/html
+      # Use conditional mounting for wp-content
+      - ${PWD}/wp-content:/var/www/html/wp-content:delegated
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_SITE_URL: http://localhost:{{WP_PORT}}
+      WORDPRESS_SITE_TITLE: WordPress Dev - {{INSTANCE_NAME}}
+      WORDPRESS_ADMIN_USER: jerry
+      WORDPRESS_ADMIN_PASSWORD: garcia
+      WORDPRESS_ADMIN_EMAIL: jerry@example.com
+    networks:
+      - wordpress_net
+    # Simplified startup command
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        # Start Apache in background
+        apache2-foreground &
+        export APACHE_PID=$$!
+
+        # Wait a moment for Apache to start
+        sleep 5
+
+        # Fix wp-content permissions for Windows/WSL compatibility
+        chown -R www-data:www-data /var/www/html/wp-content 2>/dev/null || true
+        chmod -R 755 /var/www/html/wp-content 2>/dev/null || true
+
+        # Run our installer script
+        /usr/local/bin/wp-installer.sh
+
+        # Keep Apache running
+        wait $$APACHE_PID
+
+  # phpMyAdmin Service
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: wp-test-phpmyadmin-{{WP_PORT}}
+    ports:
+      - "{{PMA_PORT}}:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: wordpress
+      PMA_PASSWORD: wordpress
+      PMA_DB: wordpress
+    depends_on:
+      - db
+    networks:
+      - wordpress_net
+
+networks:
+  wordpress_net:
+
+volumes:
+  db_data:
+  wp_data:

@@ -15,7 +15,7 @@ if [ ! -f "/var/www/html/wp-config.php" ] && [ ! -f "/var/www/html/index.php" ];
   echo "WordPress core files not found. Downloading..."
   
   # Try to download with increased memory and timeout
-  timeout 180 wp core download --allow-root --force --locale=en_US || {
+  timeout 180 wp core download --allow-root --force --locale=en_US || { # todo: is --allow-root needed here?
     echo "wp-cli download failed, trying alternative method..."
     
     # Alternative: download WordPress directly using curl
@@ -28,16 +28,15 @@ if [ ! -f "/var/www/html/wp-config.php" ] && [ ! -f "/var/www/html/index.php" ];
   }
 fi
 
+
 # Now test database connectivity using a different method first
 echo "Testing basic database connectivity..."
 MAX_TRIES=60
 COUNT=0
 
-# Function to test database connectivity without wp-cli dependency
+# Function to test database connectivity
 test_database_connection() {
-    # Try to connect using mysql client directly
-    mysql -h "${WORDPRESS_DB_HOST}" -u "${WORDPRESS_DB_USER}" -p"${WORDPRESS_DB_PASSWORD}" \
-          -e "SELECT 1;" "${WORDPRESS_DB_NAME}" 2>/dev/null
+    php -r "exit(mysqli_connect('${WORDPRESS_DB_HOST}','${WORDPRESS_DB_USER}','${WORDPRESS_DB_PASSWORD}','${WORDPRESS_DB_NAME}') ? 0 : 1);" 2>/dev/null
     return $?
 }
 
@@ -144,9 +143,7 @@ if ! wp core is-installed --allow-root 2>/dev/null; then
     find /var/www/html -type d -exec chmod 755 {} \; 2>/dev/null || true
     find /var/www/html -type f -exec chmod 644 {} \; 2>/dev/null || true
     
-    # Install themes and plugins with error handling
-    echo "Installing themes and plugins..."
-    wp theme install kadence --allow-root 2>/dev/null || echo "Note: Could not install Kadence theme"
+    # Install development plugins
     wp plugin install query-monitor --activate --allow-root 2>/dev/null || echo "Note: Could not install query-monitor"
     
     echo "WordPress installation complete!"

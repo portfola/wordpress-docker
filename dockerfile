@@ -4,7 +4,6 @@ FROM wordpress:latest
 # Install dependencies needed for wp-cli and cross-platform compatibility
 RUN apt-get update && apt-get install -y \
     less \
-    default-mysql-client \
     sudo \
     dos2unix \
     && rm -rf /var/lib/apt/lists/*
