@@ -19,7 +19,8 @@ This is a **WordPress Docker Development Environment** that enables quick creati
 
 1. **Docker Setup**
    - `Dockerfile` - Extends official WordPress image; installs wp-cli, increases PHP memory limits
-   - `docker-compose.yml` - Template defining MySQL (5.7) + Apache/WordPress services with health checks
+   - `templates/docker-compose.yml.template` - Template defining MySQL (8.0) + Apache/WordPress + phpMyAdmin services with health checks
+   - `lib/common.sh` - Shared functions used by both `create-wp-site.sh` and `import-wp-site.sh` (port detection, container wait loop, docker-compose generation, manage-site.sh generation)
    - Each site gets its own `docker-compose.yml` generated in its directory
 
 2. **Site Structure**
@@ -41,7 +42,7 @@ This is a **WordPress Docker Development Environment** that enables quick creati
 ### Key Technical Details
 
 - **Port Management**: Automatic port detection searches available ports 8080-8200. Checks both system ports and existing site configs
-- **Database**: MySQL 5.7 with credentials `wordpress:wordpress`, health checks ensure db readiness before WordPress starts
+- **Database**: MySQL 8.0 with credentials `wordpress:wordpress`, health checks ensure db readiness before WordPress starts
 - **Volume Mounts**: `wp-content/` mounted as delegated for performance; `db_data/` and `wp_data/` for persistent storage
 - **Permissions**: Script handles ownership/permissions for Windows/WSL (chown, chmod in entrypoint)
 - **Default Credentials**: Admin user `jerry`, password `garcia`
@@ -198,12 +199,12 @@ If modifying port logic, test with multiple concurrent sites to ensure no collis
 
 ### Default Admin Credentials
 
-Defined in root `docker-compose.yml` template and copied to each site's generated config:
+Defined in `templates/docker-compose.yml.template`:
 - Username: `jerry`
 - Password: `garcia`
-- Email: `admin@example.com`
+- Email: `jerry@example.com`
 
-Change these in template before creating new sites, or edit individual site's docker-compose.yml and restart.
+Change these in the template before creating new sites, or edit an individual site's `docker-compose.yml` and restart.
 
 ## Common Development Tasks
 
@@ -250,23 +251,27 @@ done
 wordpress-docker/
 ├── wp-test-project1/          # Per-site directories (created by ./create-wp-site.sh)
 │   ├── wp-content/            # Mounted themes, plugins, uploads
-│   ├── docker-compose.yml      # Site-specific config (auto-generated)
-│   ├── manage-site.sh          # Site management script
-│   └── site-info.txt           # Site metadata
-├── wp-test-project2/           # Additional sites
-├── Dockerfile                  # Custom WordPress image definition
-├── docker-compose.yml          # Root template (referenced in create script)
-├── create-wp-site.sh           # Main site creation script
-├── list-wp-sites.sh            # Multi-site management
-├── wp-dev.sh                   # Interactive menu
-├── cleanup-wp-sites.sh         # Bulk cleanup utility
-├── setup.sh                    # Initial setup
-├── check-platform.sh           # Platform detection
-├── wp-installer.sh             # Container entrypoint script
-├── readme.md                   # User documentation
-├── LICENSE                     # Project license
-├── .gitignore                  # Excludes: /wp-test*, /wp-content, /wp_data, /db_data
-└── .gitattributes              # Cross-platform line ending handling
+│   ├── docker-compose.yml     # Site-specific config (auto-generated from template)
+│   ├── manage-site.sh         # Site management script (auto-generated)
+│   └── site-info.txt          # Site metadata
+├── wp-test-project2/          # Additional sites
+├── lib/
+│   └── common.sh              # Shared functions (port detection, container wait, compose/manage-site generation)
+├── templates/
+│   └── docker-compose.yml.template  # Docker Compose template (MySQL 8.0 + WordPress + phpMyAdmin)
+├── Dockerfile                 # Custom WordPress image definition
+├── create-wp-site.sh          # Main site creation script
+├── import-wp-site.sh          # Site import from SQL dump + wp-content
+├── list-wp-sites.sh           # Multi-site management
+├── wp-dev.sh                  # Interactive menu
+├── cleanup-wp-sites.sh        # Bulk cleanup utility
+├── setup.sh                   # Initial setup
+├── check-platform.sh          # Platform detection
+├── wp-installer.sh            # Container entrypoint script
+├── readme.md                  # User documentation
+├── LICENSE                    # Project license
+├── .gitignore                 # Excludes: /wp-test*, /wp-content, /wp_data, /db_data
+└── .gitattributes             # Cross-platform line ending handling
 ```
 
 ## Git Workflow Notes
@@ -280,17 +285,17 @@ wordpress-docker/
 
 ### Adding Features to Site Creation
 
-Edit `create-wp-site.sh`:
-- Argument parsing: update `getopts` in main section
-- Port detection: modify `find_available_port()` function
-- Template generation: modify docker-compose section that writes `$SITE_COMPOSE`
+Edit `create-wp-site.sh` for script-level logic, `lib/common.sh` for shared behaviour:
+- Argument parsing: update `getopts` in `create-wp-site.sh`
+- Port detection: modify `find_available_port()` in `lib/common.sh`
+- Template generation: modify `generate_docker_compose()` in `lib/common.sh` or edit `templates/docker-compose.yml.template` directly
 
 ### Changing Default Configuration
 
-- **WordPress credentials**: Update `WORDPRESS_ADMIN_*` env vars in docker-compose.yml template
-- **MySQL version**: Update `image: mysql:X.X` in template
+- **WordPress credentials**: Update `WORDPRESS_ADMIN_*` env vars in `templates/docker-compose.yml.template`
+- **MySQL version**: Update `image: mysql:X.X` in `templates/docker-compose.yml.template`
 - **PHP settings**: Edit Dockerfile memory/timeout limits or add to docker-compose env vars
-- **Port range**: Modify `8200` limit in `find_available_port()` and related checks
+- **Port range**: Modify `8200` limit in `find_available_port()` in `lib/common.sh`
 
 ### Adding New Management Commands
 
@@ -305,4 +310,3 @@ New site operations should:
 - Use `delegated` mount mode for wp-content (already configured)
 - Run only active sites (stop others with `./list-wp-sites.sh stop`)
 - Ensure Docker Desktop has adequate CPU/RAM allocation
-- MySQL 5.7 is older; consider updating if performance is critical

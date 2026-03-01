@@ -5,8 +5,9 @@ This Docker setup provides a complete WordPress development environment with wp-
 ## Project Structure
 
 - `Dockerfile` - Creates a WordPress image with wp-cli installed
-- `docker-compose.yml` - Template for WordPress and MySQL services (auto-generated per site)
-- `create-wp-site.sh` - Enhanced script to create new WordPress instances with custom naming and port management
+- `templates/docker-compose.yml.template` - Template for WordPress, MySQL 8.0, and phpMyAdmin services (auto-generated per site)
+- `lib/common.sh` - Shared functions used by site creation and import scripts
+- `create-wp-site.sh` - Script to create new WordPress instances with custom naming and port management
 - `wp-installer.sh` - Handles WordPress installation and configuration with improved error handling
 - `cleanup-wp-sites.sh` - Utility script to clean up WordPress test sites with force mode
 - `list-wp-sites.sh` - Comprehensive site management script for multiple instances
@@ -225,7 +226,7 @@ Each site's `docker-compose.yml` includes customizable environment variables:
 
 ### Customizing Default Settings
 
-To change default credentials for new sites, modify the template in `create-wp-site.sh`:
+To change default credentials for new sites, edit `templates/docker-compose.yml.template`:
 
 ```yaml
 environment:
@@ -355,16 +356,21 @@ For better performance with multiple sites:
 ```
 wordpress-docker/
 ├── wp-test-project1/          # Individual site
-│   ├── wp-content/           # Themes, plugins, uploads
-│   ├── docker-compose.yml    # Site configuration
-│   ├── manage-site.sh        # Site management
-│   └── site-info.txt         # Site details
+│   ├── wp-content/            # Themes, plugins, uploads
+│   ├── docker-compose.yml     # Site configuration (auto-generated)
+│   ├── manage-site.sh         # Site management (auto-generated)
+│   └── site-info.txt          # Site details
 ├── wp-test-project2/          # Another site
+├── lib/
+│   └── common.sh              # Shared script functions
+├── templates/
+│   └── docker-compose.yml.template  # Docker Compose template
 ├── create-wp-site.sh          # Site creation
-├── list-wp-sites.sh          # Multi-site management
-├── wp-dev.sh                 # Interactive menu
-├── cleanup-wp-sites.sh       # Cleanup utility
-└── setup.sh                  # Initial setup
+├── import-wp-site.sh          # Site import from SQL + wp-content
+├── list-wp-sites.sh           # Multi-site management
+├── wp-dev.sh                  # Interactive menu
+├── cleanup-wp-sites.sh        # Cleanup utility
+└── setup.sh                   # Initial setup
 ```
 
 ## Support
