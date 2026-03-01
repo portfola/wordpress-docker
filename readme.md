@@ -95,6 +95,30 @@ For a user-friendly experience, use the interactive menu:
 ./create-wp-site.sh -c -n blog
 ```
 
+## Importing an Existing Site
+
+Use `import-wp-site.sh` to spin up a local copy of an existing WordPress site from a database dump and a `wp-content` directory (or archive).
+
+```bash
+# Basic import with auto-detected port
+./import-wp-site.sh -n myclient -d ~/downloads/myclient.sql -w ~/downloads/wp-content
+
+# Import on a specific port
+./import-wp-site.sh -n myclient -d ~/downloads/myclient.sql -w ~/downloads/wp-content -p 8082
+
+# Import from a tar.gz archive of wp-content
+./import-wp-site.sh -n staging -d /tmp/db.sql -w /tmp/wp-content.tar.gz
+
+# Clean up all existing sites first, then import
+./import-wp-site.sh -c -n oldsite -d ~/oldsite.sql -w ~/oldsite-wp-content.tar.gz
+```
+
+The import script automatically:
+- Detects the live site URL from the database and rewrites it to `http://localhost:<port>`
+- Handles `https://` and `www.` URL variants
+- Resets the first admin account to `jerry` / `garcia`
+- Flushes WordPress rewrite rules
+
 ## Managing Multiple Sites
 
 ### List and Monitor Sites
