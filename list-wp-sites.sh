@@ -288,6 +288,13 @@ remove_site() {
     echo "Removing $site_name..."
     cd "$site_name"
     docker-compose down -v 2>/dev/null || true
+
+    # Remove www-data-owned wp-content via a temporary container
+    if [ -d "wp-content" ]; then
+      echo "Removing wp-content directory..."
+      docker run --rm -v "$(pwd)/wp-content:/wp-content" alpine sh -c "rm -rf /wp-content/*" 2>/dev/null || true
+    fi
+
     cd - > /dev/null
     rm -rf "$site_name"
     echo "✓ $site_name removed completely"
